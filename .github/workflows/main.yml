@@ -1,35 +1,47 @@
-name: Deploy HTML to EC2
-
+name: Deploy to EC2
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Copy files to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "./*"
-          target: "/home/${{ secrets.EC2_USER }}/app"
+    - name: Debug - List files to transfer
+      run: |
+        echo "Files to be transferred:"
+        find . -type f -name "*.py" -o -name "*.js" -o -name "*.json" -o -name "*.html" -o -name "*.css" | head -10
 
-      - name: Restart Web Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo apt update
-            sudo apt install -y nginx
-            sudo cp /home/${{ secrets.EC2_USERNAME }}/app/index.html /var/www/html/index.html
-            sudo systemctl restart nginx
+    - name: Create necessary files if missing
+      run: |
+        mkdir -p dist
+        touch dist/app.js  # Create dummy file if your build doesn't exist
+
+    - name: SCP Files to EC2
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        source: ".,!node_modules,!*.git*"
+        target: "/home/${{ secrets.EC2_USERNAME }}/app"
+        overwrite: true
+        debug: true
+        timeout: 60s
+
+    - name: SSH Commands on EC2
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          whoami
+          pwd
+          ls -la /home/${{ secrets.EC2_USERNAME }}/app/
+          chmod +x /home/${{ secrets.EC2_USERNAME }}/app/*.sh 2>/dev/null || true
